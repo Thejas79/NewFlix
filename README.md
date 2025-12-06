@@ -71,10 +71,10 @@ node node_modules/vite/bin/vite.js
 Once you see a message like:
 ```
 VITE ready in 1000ms
-  ➜ Local: http://localhost:5173/
+  ➜ Local: localhost
 ```
 
-Open your browser and go to: **http://localhost:5173/**
+Open your browser and go to: **localhost**
 
 ## 🎮 How to Use
 
