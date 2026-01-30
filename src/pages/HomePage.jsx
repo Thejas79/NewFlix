@@ -7,10 +7,16 @@ import {
     fetchSeriesByLanguage,
     getImageUrl,
     BACKDROP_SIZE,
-    getLanguageName
+    getLanguageName,
+    searchContent,
+    discoverMovies,
+    discoverSeries,
+    fetchMovieGenres,
+    fetchTVGenres
 } from '../services/tmdb'
 import ContentCard from '../components/ContentCard'
 import WatchModal from '../components/WatchModal'
+import MySpace from './MySpace'
 import './HomePage.css'
 
 const languages = [
@@ -22,11 +28,49 @@ const languages = [
     { value: 'telugu', label: 'Telugu' }
 ]
 
+const categories = [
+    { id: 'cat1', name: 'Action', icon: '💥' },
+    { id: 'cat2', name: 'Comedy', icon: '😂' },
+    { id: 'cat3', name: 'Drama', icon: '🎭' },
+    { id: 'cat4', name: 'Horror', icon: '👻' },
+    { id: 'cat5', name: 'Romance', icon: '💕' },
+    { id: 'cat6', name: 'Sci-Fi', icon: '🚀' },
+    { id: 'cat7', name: 'Thriller', icon: '🔪' },
+    { id: 'cat8', name: 'Documentary', icon: '📹' },
+    { id: 'cat9', name: 'Animation', icon: '🎨' },
+    { id: 'cat10', name: 'Fantasy', icon: '🧙' }
+]
+
+const languagesPreferences = [
+    { id: 'lang1', name: 'English', flag: '🇺🇸' },
+    { id: 'lang2', name: 'Hindi', flag: '🇮🇳' },
+    { id: 'lang3', name: 'Kannada', flag: '🇮🇳' },
+    { id: 'lang4', name: 'Tamil', flag: '🇮🇳' },
+    { id: 'lang5', name: 'Telugu', flag: '🇮🇳' },
+    { id: 'lang6', name: 'Malayalam', flag: '🇮🇳' },
+    { id: 'lang7', name: 'Spanish', flag: '🇪🇸' },
+    { id: 'lang8', name: 'French', flag: '🇫🇷' },
+    { id: 'lang9', name: 'Korean', flag: '🇰🇷' },
+    { id: 'lang10', name: 'Japanese', flag: '🇯🇵' }
+]
+
+const genres = [
+    'Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime',
+    'Documentary', 'Drama', 'Family', 'Fantasy', 'Horror', 'Mystery',
+    'Romance', 'Sci-Fi', 'Thriller', 'War', 'Western', 'Musical'
+]
+
 function HomePage({ user, onLogout }) {
     const [movieFilter, setMovieFilter] = useState('all')
     const [seriesFilter, setSeriesFilter] = useState('all')
     const [selectedContent, setSelectedContent] = useState(null)
     const [isScrolled, setIsScrolled] = useState(false)
+    const [showMySpace, setShowMySpace] = useState(false)
+    const [mySpaceTab, setMySpaceTab] = useState('overview')
+    const [searchQuery, setSearchQuery] = useState('')
+    const [searchResults, setSearchResults] = useState([])
+    const [isSearching, setIsSearching] = useState(false)
+    const [showPreferences, setShowPreferences] = useState(false)
 
     // Data states
     const [featuredMovie, setFeaturedMovie] = useState(null)
@@ -34,16 +78,29 @@ function HomePage({ user, onLogout }) {
     const [series, setSeries] = useState([])
     const [loading, setLoading] = useState(true)
 
+    // Preference states
+    const [selectedCategories, setSelectedCategories] = useState([])
+    const [selectedLanguages, setSelectedLanguages] = useState([])
+    const [selectedGenres, setSelectedGenres] = useState([])
+    const [genreMap, setGenreMap] = useState({ movie: [], tv: [] })
+
     // Fetch initial data
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true)
             try {
-                const [trendingData, moviesData, seriesData] = await Promise.all([
+                const [trendingData, moviesData, seriesData, movieGenres, tvGenres] = await Promise.all([
                     fetchTrendingMovies(),
                     fetchPopularMovies(),
-                    fetchPopularSeries()
+                    fetchPopularSeries(),
+                    fetchMovieGenres(),
+                    fetchTVGenres()
                 ])
+
+                setGenreMap({
+                    movie: movieGenres,
+                    tv: tvGenres
+                })
 
                 // Set featured movie from trending
                 if (trendingData.length > 0) {
@@ -61,6 +118,70 @@ function HomePage({ user, onLogout }) {
 
         fetchData()
     }, [])
+
+
+
+    // Save Preferences Handler
+
+    const handleSavePreferences = async () => {
+        setLoading(true)
+        try {
+            // Map selected languages names to what the API expects (names are fine, service handles code mapping)
+            // Need to get the actual names from IDs
+            const languageNames = selectedLanguages.map(id => {
+                const lang = languagesPreferences.find(l => l.id === id)
+                return lang ? lang.name : null
+            }).filter(Boolean)
+
+            // Map selected genres and categories to IDs
+            // Categories and Genres are both just genres in our UI
+            // Categories: { id: 'cat1', name: 'Action' }
+            // Genres: 'Action'
+
+            const selectedGenreNames = [
+                ...selectedCategories.map(id => categories.find(c => c.id === id)?.name),
+                ...selectedGenres
+            ].filter(Boolean)
+
+            // Deduplicate names
+            const uniqueGenreNames = [...new Set(selectedGenreNames)]
+
+            // Get IDs for Movies
+            const movieGenreIds = uniqueGenreNames.map(name =>
+                genreMap.movie.find(g => g.name === name)?.id
+            ).filter(Boolean)
+
+            // Get IDs for TV
+            const tvGenreIds = uniqueGenreNames.map(name =>
+                genreMap.tv.find(g => g.name === name)?.id
+            ).filter(Boolean)
+
+            // Fetch filtered content
+            const [filteredMovies, filteredSeries] = await Promise.all([
+                discoverMovies({
+                    languages: languageNames,
+                    genres: movieGenreIds
+                }),
+                discoverSeries({
+                    languages: languageNames,
+                    genres: tvGenreIds
+                })
+            ])
+
+            setMovies(filteredMovies)
+            setSeries(filteredSeries)
+            setShowPreferences(false)
+
+            // Reset standard filters to 'all' to avoid confusion
+            setMovieFilter('all')
+            setSeriesFilter('all')
+
+        } catch (error) {
+            console.error('Error applying preferences:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
 
     // Fetch movies when language filter changes
     useEffect(() => {
@@ -99,6 +220,53 @@ function HomePage({ user, onLogout }) {
         return () => window.removeEventListener('scroll', handleScroll)
     }, [])
 
+    // Search functionality
+    useEffect(() => {
+        const performSearch = async () => {
+            if (searchQuery.trim().length > 0) {
+                setIsSearching(true)
+                const results = await searchContent(searchQuery)
+                // Filter to only show movies and TV shows (exclude people)
+                const filtered = results.filter(item =>
+                    item.media_type === 'movie' || item.media_type === 'tv'
+                )
+                setSearchResults(filtered)
+            } else {
+                setIsSearching(false)
+                setSearchResults([])
+            }
+        }
+
+        // Debounce search
+        const timeoutId = setTimeout(performSearch, 500)
+        return () => clearTimeout(timeoutId)
+    }, [searchQuery])
+
+    // Preference handlers
+    const handleCategoryToggle = (categoryId) => {
+        setSelectedCategories(prev =>
+            prev.includes(categoryId)
+                ? prev.filter(id => id !== categoryId)
+                : [...prev, categoryId]
+        )
+    }
+
+    const handleLanguageToggle = (languageId) => {
+        setSelectedLanguages(prev =>
+            prev.includes(languageId)
+                ? prev.filter(id => id !== languageId)
+                : [...prev, languageId]
+        )
+    }
+
+    const handleGenreToggle = (genre) => {
+        setSelectedGenres(prev =>
+            prev.includes(genre)
+                ? prev.filter(g => g !== genre)
+                : [...prev, genre]
+        )
+    }
+
     if (loading) {
         return (
             <div className="loading-screen">
@@ -123,16 +291,109 @@ function HomePage({ user, onLogout }) {
                         <li><a href="#series">Series</a></li>
                     </ul>
                 </div>
+                <div className="nav-search">
+                    <input
+                        type="text"
+                        placeholder="Search movies, series, actors..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="search-input-nav"
+                    />
+                    <button className="search-btn-nav" onClick={() => console.log('Searching for:', searchQuery)}>
+                        🔍
+                    </button>
+                </div>
                 <div className="nav-right">
+                    <button
+                        className="btn btn-outline btn-sm preferences-toggle"
+                        onClick={() => setShowPreferences(!showPreferences)}
+                    >
+                        ⚙️ Preferences
+                    </button>
                     <div className="user-info">
                         <div className="user-avatar">{user.username.charAt(0).toUpperCase()}</div>
                         <span className="user-name">Hi, <strong>{user.username}</strong></span>
                     </div>
+                    <button className="btn btn-outline btn-sm" onClick={() => { setMySpaceTab('overview'); setShowMySpace(true); }}>
+                        My Space
+                    </button>
                     <button className="btn btn-outline btn-sm" onClick={onLogout}>
                         Sign Out
                     </button>
                 </div>
             </nav>
+
+            {/* Preferences Dropdown */}
+            {showPreferences && (
+                <div className="preferences-dropdown">
+                    <div className="preferences-dropdown-container">
+                        <div className="preferences-header">
+                            <h3>⚙️ Customize Your Preferences</h3>
+                            <button className="close-preferences" onClick={() => setShowPreferences(false)}>✕</button>
+                        </div>
+
+                        <div className="preferences-tabs">
+                            <div className="preferences-tab-content">
+                                {/* Categories */}
+                                <div className="pref-section">
+                                    <h4>📂 Categories</h4>
+                                    <div className="pref-grid">
+                                        {categories.map(category => (
+                                            <div
+                                                key={category.id}
+                                                className={`pref-chip ${selectedCategories.includes(category.id) ? 'selected' : ''}`}
+                                                onClick={() => handleCategoryToggle(category.id)}
+                                            >
+                                                <span>{category.icon} {category.name}</span>
+                                                {selectedCategories.includes(category.id) && <span className="chip-check">✓</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Languages */}
+                                <div className="pref-section">
+                                    <h4>🌍 Languages</h4>
+                                    <div className="pref-grid">
+                                        {languagesPreferences.map(language => (
+                                            <div
+                                                key={language.id}
+                                                className={`pref-chip ${selectedLanguages.includes(language.id) ? 'selected' : ''}`}
+                                                onClick={() => handleLanguageToggle(language.id)}
+                                            >
+                                                <span>{language.flag} {language.name}</span>
+                                                {selectedLanguages.includes(language.id) && <span className="chip-check">✓</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Genres */}
+                                <div className="pref-section">
+                                    <h4>🎭 Genres</h4>
+                                    <div className="pref-tags">
+                                        {genres.map(genre => (
+                                            <div
+                                                key={genre}
+                                                className={`pref-tag ${selectedGenres.includes(genre) ? 'selected' : ''}`}
+                                                onClick={() => handleGenreToggle(genre)}
+                                            >
+                                                {genre} {selectedGenres.includes(genre) && '✓'}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="preferences-footer">
+                                <button className="btn btn-primary" onClick={handleSavePreferences}>
+                                    💾 Save Preferences
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Hero Section */}
             {featuredMovie && (
@@ -170,93 +431,142 @@ function HomePage({ user, onLogout }) {
                 </section>
             )}
 
-            {/* Movies Section */}
-            <section className="content-section" id="movies">
-                <div className="section-container">
-                    <div className="section-header">
-                        <div className="title-group">
-                            <h2 className="section-title">
-                                <span className="title-icon">🎬</span> Movies
-                            </h2>
-                            <p className="section-subtitle">Blockbusters in every language</p>
-                        </div>
-                        <div className="filter-group">
-                            <label htmlFor="movieLang">Language:</label>
-                            <select
-                                id="movieLang"
-                                value={movieFilter}
-                                onChange={(e) => setMovieFilter(e.target.value)}
-                                className="filter-select"
+            {/* Search Results Section */}
+            {isSearching && searchQuery && (
+                <section className="content-section search-results-section">
+                    <div className="section-container">
+                        <div className="section-header">
+                            <div className="title-group">
+                                <h2 className="section-title">
+                                    <span className="title-icon">🔍</span> Search Results for "{searchQuery}"
+                                </h2>
+                                <p className="section-subtitle">
+                                    Found {searchResults.length} {searchResults.length === 1 ? 'result' : 'results'}
+                                </p>
+                            </div>
+                            <button
+                                className="btn btn-outline btn-sm"
+                                onClick={() => {
+                                    setSearchQuery('')
+                                    setIsSearching(false)
+                                    setSearchResults([])
+                                }}
                             >
-                                {languages.map(lang => (
-                                    <option key={lang.value} value={lang.value}>{lang.label}</option>
+                                Clear Search
+                            </button>
+                        </div>
+
+                        {searchResults.length > 0 ? (
+                            <div className="content-grid">
+                                {searchResults.map(item => (
+                                    <ContentCard
+                                        key={`${item.media_type}-${item.id}`}
+                                        content={item}
+                                        type={item.media_type === 'tv' ? 'series' : 'movie'}
+                                        onClick={() => setSelectedContent(item)}
+                                    />
                                 ))}
-                            </select>
-                        </div>
+                            </div>
+                        ) : (
+                            <div className="empty-state">
+                                <p>No results found for "{searchQuery}". Try a different search term!</p>
+                            </div>
+                        )}
                     </div>
+                </section>
+            )}
 
-                    <div className="content-grid">
-                        {movies.slice(0, 10).map(movie => (
-                            <ContentCard
-                                key={movie.id}
-                                content={movie}
-                                type="movie"
-                                onClick={() => setSelectedContent({ ...movie, media_type: 'movie' })}
-                            />
-                        ))}
-                    </div>
-
-                    {movies.length === 0 && (
-                        <div className="empty-state">
-                            <p>No movies found in this language. Try another!</p>
+            {/* Movies Section */}
+            {!isSearching && (
+                <section className="content-section" id="movies">
+                    <div className="section-container">
+                        <div className="section-header">
+                            <div className="title-group">
+                                <h2 className="section-title">
+                                    <span className="title-icon">🎬</span> Movies
+                                </h2>
+                                <p className="section-subtitle">Blockbusters in every language</p>
+                            </div>
+                            <div className="filter-group">
+                                <label htmlFor="movieLang">Language:</label>
+                                <select
+                                    id="movieLang"
+                                    value={movieFilter}
+                                    onChange={(e) => setMovieFilter(e.target.value)}
+                                    className="filter-select"
+                                >
+                                    {languages.map(lang => (
+                                        <option key={lang.value} value={lang.value}>{lang.label}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
-                    )}
-                </div>
-            </section>
+
+                        <div className="content-grid">
+                            {movies.slice(0, 10).map(movie => (
+                                <ContentCard
+                                    key={movie.id}
+                                    content={movie}
+                                    type="movie"
+                                    onClick={() => setSelectedContent({ ...movie, media_type: 'movie' })}
+                                />
+                            ))}
+                        </div>
+
+                        {movies.length === 0 && (
+                            <div className="empty-state">
+                                <p>No movies found in this language. Try another!</p>
+                            </div>
+                        )}
+                    </div>
+                </section>
+            )}
 
             {/* Series Section */}
-            <section className="content-section alt-bg" id="series">
-                <div className="section-container">
-                    <div className="section-header">
-                        <div className="title-group">
-                            <h2 className="section-title">
-                                <span className="title-icon">📺</span> TV Series
-                            </h2>
-                            <p className="section-subtitle">Binge-worthy shows await</p>
+            {!isSearching && (
+                <section className="content-section alt-bg" id="series">
+                    <div className="section-container">
+                        <div className="section-header">
+                            <div className="title-group">
+                                <h2 className="section-title">
+                                    <span className="title-icon">📺</span> TV Series
+                                </h2>
+                                <p className="section-subtitle">Binge-worthy shows await</p>
+                            </div>
+                            <div className="filter-group">
+                                <label htmlFor="seriesLang">Language:</label>
+                                <select
+                                    id="seriesLang"
+                                    value={seriesFilter}
+                                    onChange={(e) => setSeriesFilter(e.target.value)}
+                                    className="filter-select"
+                                >
+                                    {languages.map(lang => (
+                                        <option key={lang.value} value={lang.value}>{lang.label}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
-                        <div className="filter-group">
-                            <label htmlFor="seriesLang">Language:</label>
-                            <select
-                                id="seriesLang"
-                                value={seriesFilter}
-                                onChange={(e) => setSeriesFilter(e.target.value)}
-                                className="filter-select"
-                            >
-                                {languages.map(lang => (
-                                    <option key={lang.value} value={lang.value}>{lang.label}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
 
-                    <div className="content-grid">
-                        {series.slice(0, 10).map(show => (
-                            <ContentCard
-                                key={show.id}
-                                content={show}
-                                type="series"
-                                onClick={() => setSelectedContent({ ...show, media_type: 'tv' })}
-                            />
-                        ))}
-                    </div>
-
-                    {series.length === 0 && (
-                        <div className="empty-state">
-                            <p>No series found in this language. Try another!</p>
+                        <div className="content-grid">
+                            {series.slice(0, 10).map(show => (
+                                <ContentCard
+                                    key={show.id}
+                                    content={show}
+                                    type="series"
+                                    onClick={() => setSelectedContent({ ...show, media_type: 'tv' })}
+                                />
+                            ))}
                         </div>
-                    )}
-                </div>
-            </section>
+
+                        {series.length === 0 && (
+                            <div className="empty-state">
+                                <p>No series found in this language. Try another!</p>
+                            </div>
+                        )}
+                    </div>
+                </section>
+            )}
 
             {/* Footer */}
             <footer className="footer">
@@ -298,7 +608,7 @@ function HomePage({ user, onLogout }) {
                     </div>
                 </div>
                 <div className="footer-bottom">
-                    <p>© 2025 NewFlix. Powered by TMDB | Made with ❤️</p>
+                    <p>© 2025 NewFlix. Powered by TMDB</p>
                 </div>
             </footer>
 
@@ -307,6 +617,21 @@ function HomePage({ user, onLogout }) {
                 <WatchModal
                     content={selectedContent}
                     onClose={() => setSelectedContent(null)}
+                    user={user}
+                    onSubscribe={() => {
+                        setSelectedContent(null)
+                        setMySpaceTab('subscription')
+                        setShowMySpace(true)
+                    }}
+                />
+            )}
+
+            {/* My Space Modal */}
+            {showMySpace && (
+                <MySpace
+                    user={user}
+                    onClose={() => setShowMySpace(false)}
+                    initialTab={mySpaceTab}
                 />
             )}
         </div>

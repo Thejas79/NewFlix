@@ -1,7 +1,13 @@
+import { useState, useEffect } from 'react'
 import { getImageUrl, getLanguageName, BACKDROP_SIZE } from '../services/tmdb'
+import { contentAPI } from '../services/contentAPI'
 import './WatchModal.css'
 
-function WatchModal({ content, onClose }) {
+function WatchModal({ content, onClose, user, onSubscribe }) {
+    const [isLiked, setIsLiked] = useState(false)
+    const [isInWatchlist, setIsInWatchlist] = useState(false)
+    const [isLoading, setIsLoading] = useState(true)
+
     const title = content.title || content.name
     const year = (content.release_date || content.first_air_date)?.split('-')[0]
     const rating = content.vote_average?.toFixed(1)
@@ -9,8 +15,57 @@ function WatchModal({ content, onClose }) {
     const poster = getImageUrl(content.poster_path)
     const backdrop = getImageUrl(content.backdrop_path, BACKDROP_SIZE)
 
+    // Check backend status on mount
+    useEffect(() => {
+        const checkStatus = async () => {
+            try {
+                const userContent = await contentAPI.getUserContent()
+                const currentItem = userContent.find(item =>
+                    item.contentId === content.id.toString() &&
+                    item.contentType === (content.media_type || 'movie')
+                )
+
+                if (currentItem) {
+                    setIsLiked(currentItem.liked)
+                    setIsInWatchlist(currentItem.inWatchlist)
+                }
+            } catch (error) {
+                console.error("Failed to check status", error)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        checkStatus()
+    }, [content.id])
+
     const handlePlay = () => {
+        if (user?.subscriptionStatus !== 'ACTIVE') {
+            onSubscribe()
+            return
+        }
         alert(`🎬 Now playing: ${title}\n\nEnjoy your ${content.media_type === 'tv' ? 'series' : 'movie'}!`)
+    }
+
+    const toggleLike = async () => {
+        const newStatus = !isLiked
+        setIsLiked(newStatus) // Optimistic update
+        try {
+            await contentAPI.toggleLike(content, newStatus)
+        } catch (error) {
+            setIsLiked(!newStatus) // Revert on error
+            console.error("Like failed", error)
+        }
+    }
+
+    const toggleWatchlist = async () => {
+        const newStatus = !isInWatchlist
+        setIsInWatchlist(newStatus) // Optimistic update
+        try {
+            await contentAPI.toggleWatchlist(content, newStatus)
+        } catch (error) {
+            setIsInWatchlist(!newStatus) // Revert on error
+            console.error("Watchlist failed", error)
+        }
     }
 
     return (
@@ -54,13 +109,22 @@ function WatchModal({ content, onClose }) {
 
                         <div className="modal-actions">
                             <button className="btn btn-primary btn-lg" onClick={handlePlay}>
-                                <span className="btn-icon">▶</span> Play Now
+                                <span className="btn-icon">{user?.subscriptionStatus === 'ACTIVE' ? '▶' : '🔒'}</span>
+                                {user?.subscriptionStatus === 'ACTIVE' ? 'Play Now' : 'Subscribe to Watch'}
                             </button>
-                            <button className="btn btn-glass btn-lg">
-                                <span className="btn-icon">+</span> Add to List
+                            <button
+                                className={`btn btn-glass btn-lg ${isInWatchlist ? 'active' : ''}`}
+                                onClick={toggleWatchlist}
+                            >
+                                <span className="btn-icon">{isInWatchlist ? '✓' : '+'}</span>
+                                {isInWatchlist ? 'In Watchlist' : 'Add to List'}
                             </button>
-                            <button className="btn btn-glass btn-lg">
-                                <span className="btn-icon">👍</span> Like
+                            <button
+                                className={`btn btn-glass btn-lg ${isLiked ? 'active' : ''}`}
+                                onClick={toggleLike}
+                            >
+                                <span className="btn-icon">{isLiked ? '❤️' : '👍'}</span>
+                                {isLiked ? 'Liked' : 'Like'}
                             </button>
                         </div>
                     </div>

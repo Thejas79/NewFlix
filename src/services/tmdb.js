@@ -14,12 +14,17 @@ export const getImageUrl = (path, size = POSTER_SIZE) => {
 };
 
 // Language codes for TMDB
-const languageCodes = {
+export const languageCodes = {
     english: 'en',
     hindi: 'hi',
     kannada: 'kn',
     tamil: 'ta',
-    telugu: 'te'
+    telugu: 'te',
+    malayalam: 'ml',
+    spanish: 'es',
+    french: 'fr',
+    korean: 'ko',
+    japanese: 'ja'
 };
 
 // Fetch trending movies
@@ -53,7 +58,7 @@ export const fetchPopularMovies = async () => {
 // Fetch movies by language
 export const fetchMoviesByLanguage = async (language = 'en') => {
     try {
-        const langCode = languageCodes[language] || language;
+        const langCode = languageCodes[language.toLowerCase()] || language;
         const response = await fetch(
             `${BASE_URL}/discover/movie?api_key=${API_KEY}&with_original_language=${langCode}&sort_by=popularity.desc&page=1`
         );
@@ -61,6 +66,30 @@ export const fetchMoviesByLanguage = async (language = 'en') => {
         return data.results || [];
     } catch (error) {
         console.error('Error fetching movies by language:', error);
+        return [];
+    }
+};
+
+// Discover movies with filters
+export const discoverMovies = async ({ languages = [], genres = [] }) => {
+    try {
+        let url = `${BASE_URL}/discover/movie?api_key=${API_KEY}&sort_by=popularity.desc&page=1`;
+
+        if (languages.length > 0) {
+            const langCodes = languages.map(l => languageCodes[l.toLowerCase()] || l).join('|');
+            url += `&with_original_language=${langCodes}`;
+        }
+
+        if (genres.length > 0) {
+            const genreIds = genres.join('|'); // OR logic
+            url += `&with_genres=${genreIds}`;
+        }
+
+        const response = await fetch(url);
+        const data = await response.json();
+        return data.results || [];
+    } catch (error) {
+        console.error('Error discovering movies:', error);
         return [];
     }
 };
@@ -82,7 +111,7 @@ export const fetchPopularSeries = async () => {
 // Fetch series by language
 export const fetchSeriesByLanguage = async (language = 'en') => {
     try {
-        const langCode = languageCodes[language] || language;
+        const langCode = languageCodes[language.toLowerCase()] || language;
         const response = await fetch(
             `${BASE_URL}/discover/tv?api_key=${API_KEY}&with_original_language=${langCode}&sort_by=popularity.desc&page=1`
         );
@@ -90,6 +119,30 @@ export const fetchSeriesByLanguage = async (language = 'en') => {
         return data.results || [];
     } catch (error) {
         console.error('Error fetching series by language:', error);
+        return [];
+    }
+};
+
+// Discover series with filters
+export const discoverSeries = async ({ languages = [], genres = [] }) => {
+    try {
+        let url = `${BASE_URL}/discover/tv?api_key=${API_KEY}&sort_by=popularity.desc&page=1`;
+
+        if (languages.length > 0) {
+            const langCodes = languages.map(l => languageCodes[l.toLowerCase()] || l).join('|');
+            url += `&with_original_language=${langCodes}`;
+        }
+
+        if (genres.length > 0) {
+            const genreIds = genres.join('|'); // OR logic
+            url += `&with_genres=${genreIds}`;
+        }
+
+        const response = await fetch(url);
+        const data = await response.json();
+        return data.results || [];
+    } catch (error) {
+        console.error('Error discovering series:', error);
         return [];
     }
 };

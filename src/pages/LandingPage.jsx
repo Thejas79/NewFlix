@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './LandingPage.css'
+import { authAPI, saveUserData } from '../services/authAPI'
 
 function LandingPage({ onLogin }) {
     const [isLogin, setIsLogin] = useState(true)
@@ -12,6 +13,8 @@ function LandingPage({ onLogin }) {
     })
     const [errors, setErrors] = useState({})
     const [showModal, setShowModal] = useState(false)
+    const [loading, setLoading] = useState(false)
+    const [apiMessage, setApiMessage] = useState('')
     const navigate = useNavigate()
 
     // Featured movie posters from TMDB
@@ -48,14 +51,81 @@ function LandingPage({ onLogin }) {
         return Object.keys(newErrors).length === 0
     }
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault()
-        if (validateForm()) {
-            onLogin({
-                username: formData.username,
-                email: formData.email || `${formData.username}@newflix.com`
-            })
-            navigate('/browse')
+        setApiMessage('')
+
+        if (!validateForm()) {
+            return
+        }
+
+        setLoading(true)
+
+        try {
+            if (isLogin) {
+                // Sign In
+                const response = await authAPI.signIn(
+                    formData.username,
+                    formData.password
+                )
+
+                if (response.success) {
+                    // Save user data to localStorage
+                    saveUserData(response.user)
+
+                    // Call parent onLogin with user data
+                    onLogin({
+                        username: response.user.username,
+                        email: response.user.email
+                    })
+
+                    // Show success message
+                    setApiMessage(response.message)
+
+                    // Navigate to browse page
+                    setTimeout(() => {
+                        navigate('/browse')
+                    }, 500)
+                } else {
+                    setApiMessage(response.message)
+                    setErrors({ general: response.message })
+                }
+            } else {
+                // Sign Up
+                const response = await authAPI.signUp(
+                    formData.username,
+                    formData.email,
+                    formData.password
+                )
+
+                if (response.success) {
+                    // Save user data to localStorage
+                    saveUserData(response.user)
+
+                    // Call parent onLogin with user data
+                    onLogin({
+                        username: response.user.username,
+                        email: response.user.email
+                    })
+
+                    // Show success message
+                    setApiMessage(response.message)
+
+                    // Navigate to browse page
+                    setTimeout(() => {
+                        navigate('/browse')
+                    }, 500)
+                } else {
+                    setApiMessage(response.message)
+                    setErrors({ general: response.message })
+                }
+            }
+        } catch (error) {
+            console.error('Authentication error:', error)
+            setApiMessage(error.message || 'Unable to connect to server. Please ensure the backend is running.')
+            setErrors({ general: error.message || 'Server connection failed' })
+        } finally {
+            setLoading(false)
         }
     }
 
@@ -203,6 +273,13 @@ function LandingPage({ onLogin }) {
                         </div>
 
                         <form className="auth-form" onSubmit={handleSubmit}>
+                            {/* API Message Display */}
+                            {apiMessage && (
+                                <div className={`api-message ${errors.general ? 'error' : 'success'}`}>
+                                    {apiMessage}
+                                </div>
+                            )}
+
                             <div className="form-group">
                                 <label htmlFor="username">Username</label>
                                 <input
@@ -213,6 +290,7 @@ function LandingPage({ onLogin }) {
                                     onChange={handleChange}
                                     placeholder="Enter your username"
                                     className={errors.username ? 'error' : ''}
+                                    disabled={loading}
                                 />
                                 {errors.username && <span className="error-msg">{errors.username}</span>}
                             </div>
@@ -228,6 +306,7 @@ function LandingPage({ onLogin }) {
                                         onChange={handleChange}
                                         placeholder="Enter your email"
                                         className={errors.email ? 'error' : ''}
+                                        disabled={loading}
                                     />
                                     {errors.email && <span className="error-msg">{errors.email}</span>}
                                 </div>
@@ -243,6 +322,7 @@ function LandingPage({ onLogin }) {
                                     onChange={handleChange}
                                     placeholder="Enter your password"
                                     className={errors.password ? 'error' : ''}
+                                    disabled={loading}
                                 />
                                 {errors.password && <span className="error-msg">{errors.password}</span>}
                             </div>
@@ -258,13 +338,14 @@ function LandingPage({ onLogin }) {
                                         onChange={handleChange}
                                         placeholder="Confirm your password"
                                         className={errors.confirmPassword ? 'error' : ''}
+                                        disabled={loading}
                                     />
                                     {errors.confirmPassword && <span className="error-msg">{errors.confirmPassword}</span>}
                                 </div>
                             )}
 
-                            <button type="submit" className="btn btn-primary btn-full">
-                                {isLogin ? 'Sign In' : 'Create Account'}
+                            <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
+                                {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
                             </button>
                         </form>
 
