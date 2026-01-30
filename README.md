@@ -2,7 +2,7 @@
 
 A beautiful Netflix clone built with React and powered by TMDB API. Features real movies and TV shows with language filtering.
 
-![NewFlix](https://image.tmdb.org/t/p/original/8cdWjvZQUExUUTzyp4t6EDMubfO.jpg)
+
 
 ## 🚀 Features
 
